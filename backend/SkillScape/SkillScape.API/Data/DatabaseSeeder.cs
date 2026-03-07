@@ -10,7 +10,18 @@ public static class DatabaseSeeder
     {
         // Skip if data already exists
         if (context.CareerDomains.Any())
+        {
+            // But still seed mentorship progress if mentors exist but no progress exists
+            if (context.Mentors.Any() && !context.MentorshipProgressEntries.Any())
+            {
+                var existingUsers = context.Users.ToList();
+                var existingMentors = context.Mentors.ToList();
+                var progressEntries = SeedMentorshipProgress(context, existingUsers, existingMentors);
+                context.MentorshipProgressEntries.AddRange(progressEntries);
+                await context.SaveChangesAsync();
+            }
             return;
+        }
 
         // Seed Career Domains
         var domains = SeedDomains(context);
@@ -46,6 +57,11 @@ public static class DatabaseSeeder
         // Seed Sample Mentors
         var mentors = SeedMentors(context, users.Where(u => u.Role == "Mentor").ToList());
         context.Mentors.AddRange(mentors);
+        await context.SaveChangesAsync();
+
+        // Seed Mentorship Progress (student-mentor relationships)
+        var mentorshipProgresses = SeedMentorshipProgress(context, users, mentors);
+        context.MentorshipProgressEntries.AddRange(mentorshipProgresses);
         await context.SaveChangesAsync();
     }
 
@@ -369,7 +385,21 @@ public static class DatabaseSeeder
 
     private static List<ApplicationUser> SeedUsers()
     {
-        return new List<ApplicationUser>
+        var mentorNames = new[]
+        {
+            ("Sarah Chen", "Frontend Development", "UI/UX specialist with 10 years experience"),
+            ("Rajesh Kumar", "Backend Development", "Cloud architect and API design expert"),
+            ("Emily Watson", "Data Science", "ML engineer with focus on deep learning"),
+            ("Michael Johnson", "Full Stack Development", "MERN stack expert"),
+            ("Priya Sharma", "DevOps & Cloud", "AWS certified cloud architect"),
+            ("David Lee", "Mobile Development", "React Native and iOS developer"),
+            ("Jessica Brown", "Web3 & Blockchain", "Smart contracts and DeFi specialist"),
+            ("Alex Martinez", "System Design", "Distributed systems expert"),
+            ("Lisa Wang", "Security & Cryptography", "Cybersecurity specialist"),
+            ("James Wilson", "Game Development", "Unity and Unreal Engine expert")
+        };
+
+        var users = new List<ApplicationUser>
         {
             new ApplicationUser
             {
@@ -382,20 +412,11 @@ public static class DatabaseSeeder
                 TotalXP = 0,
                 CurrentStreak = 0,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            },
-            new ApplicationUser
-            {
-                Id = Guid.NewGuid().ToString(),
-                Email = "mentor@example.com",
-                FullName = "Sarah Chen",
-                Role = "Mentor",
-                Bio = "Senior developer with 10 years of experience",
-                Level = 10,
-                TotalXP = 1000,
-                CurrentStreak = 15,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                ProfileCompleted = false,
+                IsBlocked = false,
+                BlockedReason = null,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             },
             new ApplicationUser
             {
@@ -406,25 +427,150 @@ public static class DatabaseSeeder
                 Level = 20,
                 TotalXP = 5000,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                ProfileCompleted = true,
+                IsBlocked = false,
+                BlockedReason = null,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             }
         };
+
+        // Create mentor users with diverse specializations
+        foreach (var (name, specialty, bio) in mentorNames)
+        {
+            users.Add(new ApplicationUser
+            {
+                Id = Guid.NewGuid().ToString(),
+                Email = $"{name.ToLower().Replace(" ", ".")}@mentors.com",
+                FullName = name,
+                Role = "Mentor",
+                Bio = bio,
+                Level = 10,
+                TotalXP = 2000,
+                CurrentStreak = 30,
+                IsActive = true,
+                ProfileCompleted = true,
+                IsBlocked = false,
+                BlockedReason = null,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+
+        return users;
     }
 
     private static List<ApplicationMentor> SeedMentors(ApplicationDbContext context, List<ApplicationUser> mentorUsers)
     {
-        return mentorUsers.Select(user => new ApplicationMentor
+        var mentorSpecializations = new Dictionary<string, (string expertise, string skills, string company, decimal rate, double rating)>
         {
-            Id = Guid.NewGuid().ToString(),
-            UserId = user.Id,
-            Expertise = "Full Stack Development, Web Technologies",
-            Bio = user.Bio,
-            YearsOfExperience = 10,
-            HourlyRate = 50,
-            IsAvailable = true,
-            TotalSessionCount = 25,
-            AvgRating = 4.8,
-            CreatedAt = DateTime.UtcNow
-        }).ToList();
+            { "Sarah Chen", ("Frontend Development", "React,JavaScript,CSS,TypeScript", "TechCorp", 60, 4.9) },
+            { "Rajesh Kumar", ("Backend Development", "Node.js,Python,Docker,Kubernetes", "CloudInnovate", 70, 4.7) },
+            { "Emily Watson", ("Data Science", "Python,TensorFlow,pandas,scikit-learn", "DataAI Labs", 80, 4.8) },
+            { "Michael Johnson", ("Full Stack Development", "React,Node.js,MongoDB,Express", "WebDev Solutions", 55, 4.6) },
+            { "Priya Sharma", ("DevOps & Cloud", "AWS,Azure,Terraform,CI/CD", "CloudOps Inc", 75, 4.9) },
+            { "David Lee", ("Mobile Development", "React Native,Swift,Kotlin,Flutter", "MobileWorks", 65, 4.7) },
+            { "Jessica Brown", ("Web3 & Blockchain", "Solidity,Ethereum,Web3.js,Smart Contracts", "BlockchainHub", 90, 4.8) },
+            { "Alex Martinez", ("System Design", "Microservices,Distributed Systems,C++", "SystemsDesign Co", 85, 4.9) },
+            { "Lisa Wang", ("Security & Cryptography", "Cybersecurity,Ethical Hacking,Cryptography", "SecureCode Inc", 95, 4.8) },
+            { "James Wilson", ("Game Development", "Unity,Unreal,C#,GameDesign", "GameStudio Pro", 70, 4.7) }
+        };
+
+        return mentorUsers
+            .Where(u => u.Role == "Mentor")
+            .Select(user =>
+            {
+                var (expertise, skills, company, rate, rating) = mentorSpecializations.ContainsKey(user.FullName)
+                    ? mentorSpecializations[user.FullName]
+                    : ("Full Stack Development", "C#,ASP.NET Core,React,SQL", "SkillScape Labs", 50, 4.5);
+
+                return new ApplicationMentor
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserId = user.Id,
+                    Expertise = expertise,
+                    ExpertiseArea = expertise,
+                    CurrentCompany = company,
+                    Bio = user.Bio,
+                    SkillsCsv = skills,
+                    LinkedInUrl = $"https://linkedin.com/in/{user.FullName.ToLower().Replace(" ", "-")}",
+                    AvailabilitySchedule = "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday",
+                    YearsOfExperience = new Random().Next(3, 15),
+                    HourlyRate = rate,
+                    SessionPrice = rate,
+                    IsAvailable = true,
+                    TotalSessionCount = new Random().Next(10, 100),
+                    AvgRating = rating,
+                    IsApproved = true,
+                    ApprovedByAdminId = null,
+                    ApprovedAt = DateTime.UtcNow,
+                    RejectionReason = null,
+                    CreatedAt = DateTime.UtcNow
+                };
+            }).ToList();
+    }
+
+    private static List<MentorshipProgress> SeedMentorshipProgress(ApplicationDbContext context, List<ApplicationUser> users, List<ApplicationMentor> mentors)
+    {
+        var mentorshipProgresses = new List<MentorshipProgress>();
+        var studentUsers = users.Where(u => u.Role == "Student").ToList();
+        
+        if (studentUsers.Count == 0)
+            return mentorshipProgresses;
+
+        var random = new Random();
+        var roadmapStages = new[] { "Basics", "Fundamentals", "Intermediate", "Advanced", "Expert", "Mastery" };
+        var tasks = new[] 
+        { 
+            "Complete beginner course, Learn syntax, Build first project",
+            "Build 2 projects, Contribute to open source, Review code",
+            "Advanced design patterns, System design, Mentoring skills",
+            "Build scalable application, Deploy to production, Optimize performance",
+            "Write technical blog, Create course content, Lead team",
+            "Expert level, Industry recognition, Multiple achievements"
+        };
+
+        // Get existing entries to avoid duplicates
+        var existingEntries = context.MentorshipProgressEntries
+            .Select(e => new { e.StudentId, e.RoadmapStage })
+            .ToHashSet();
+
+        // Create mentorship progress for each mentor
+        foreach (var mentor in mentors)
+        {
+            // Each mentor mentors 2-5 students
+            int studentCount = Math.Min(random.Next(2, 6), studentUsers.Count);
+            var assignedStudents = studentUsers.OrderBy(x => random.Next()).Take(studentCount).ToList();
+
+            foreach (var student in assignedStudents)
+            {
+                // Pick stages that don't already exist for this student
+                var availableStages = roadmapStages
+                    .Where(stage => !existingEntries.Contains(new { StudentId = student.Id, RoadmapStage = stage }))
+                    .ToList();
+
+                if (availableStages.Count == 0)
+                    continue; // Skip if all stages already assigned to this student
+
+                var stage = availableStages[random.Next(availableStages.Count)];
+                
+                mentorshipProgresses.Add(new MentorshipProgress
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    StudentId = student.Id,
+                    MentorId = mentor.Id,
+                    RoadmapStage = stage,
+                    MentorFeedback = $"Great progress on {stage}! Keep practicing and building projects.",
+                    CompletedTasks = tasks[random.Next(tasks.Length)],
+                    NextMilestone = roadmapStages[(Array.IndexOf(roadmapStages, stage) + 1) % roadmapStages.Length],
+                    UpdatedAt = DateTime.UtcNow.AddDays(-random.Next(0, 30))
+                });
+
+                // Track the new entry
+                existingEntries.Add(new { StudentId = student.Id, RoadmapStage = stage });
+            }
+        }
+
+        return mentorshipProgresses;
     }
 }

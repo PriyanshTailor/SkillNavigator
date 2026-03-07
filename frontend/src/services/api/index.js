@@ -11,3 +11,6 @@ export { mentorsApi } from './mentors';
 export { resumeApi } from './resume';
 export { roadmapApi } from './roadmap';
 export { chatApi } from './chat';
+export { adminApi } from './admin';
+export { sessionsApi } from './sessions';
+

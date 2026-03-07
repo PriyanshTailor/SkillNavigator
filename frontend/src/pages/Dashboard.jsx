@@ -16,15 +16,12 @@ import {
   Clock,
   Star,
   Loader2,
+  BellRing,
+  X,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { progressApi } from '@/services/api';
-
-// Mock Data for sessions (will be replaced when mentor sessions API is ready)
-const upcomingSessions = [
-  { id: '1', mentor: 'Sarah Chen', topic: 'Career Guidance', time: 'Tomorrow, 3:00 PM' },
-  { id: '2', mentor: 'John Smith', topic: 'React Best Practices', time: 'Friday, 10:00 AM' },
-];
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { progressApi, mentorsApi, sessionsApi } from '@/services/api';
+import { toast } from 'sonner';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -38,10 +35,22 @@ const itemVariants = {
 
 const DashboardPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
+  if (user?.role === 'Admin') {
+    return <Navigate to="/admin" replace />;
+  }
+
+  if (user?.role === 'Mentor') {
+    return <Navigate to="/mentor-dashboard" replace />;
+  }
+
   const [stats, setStats] = useState(null);
   const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [upcomingSessions, setUpcomingSessions] = useState([]);
 
   const [roadmapData, setRoadmapData] = useState(null);
 
@@ -52,15 +61,19 @@ const DashboardPage = () => {
         setError(null);
 
         // Fetch dashboard data and the custom ML roadmap concurrently
-        const [statsRes, badgesRes, roadmapRes] = await Promise.all([
+        const [statsRes, badgesRes, roadmapRes, notificationsRes, sessionsRes] = await Promise.all([
           progressApi.getMyProgress(),
           progressApi.getBadges(),
-          import('@/services/api').then(m => m.roadmapApi.getMyInterestRoadmap().catch(() => ({ data: { data: null } })))
+          import('@/services/api').then(m => m.roadmapApi.getMyInterestRoadmap().catch(() => ({ data: { data: null } }))),
+          mentorsApi.getNotifications().catch(() => ({ data: [] })),
+          sessionsApi.getUpcomingSessions().catch(() => ({ data: [] }))
         ]);
 
         setStats(statsRes.data);
         setBadges(badgesRes.data || []);
         setRoadmapData(roadmapRes.data?.data);
+        setNotifications(notificationsRes.data || []);
+        setUpcomingSessions(sessionsRes.data || []);
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
         setError(err.message || 'Failed to load dashboard data');
@@ -71,6 +84,25 @@ const DashboardPage = () => {
 
     fetchDashboardData();
   }, []);
+
+  // Helper function to format session date/time
+  const formatSessionTime = (scheduledDateTime) => {
+    const date = new Date(scheduledDateTime);
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const isToday = date.toDateString() === now.toDateString();
+    const isTomorrow = date.toDateString() === tomorrow.toDateString();
+    
+    const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    
+    if (isToday) return `Today, ${timeStr}`;
+    if (isTomorrow) return `Tomorrow, ${timeStr}`;
+    
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+    return `${dayName}, ${timeStr}`;
+  };
 
   // Show loading state
   if (loading) {
@@ -105,14 +137,19 @@ const DashboardPage = () => {
   const xpProgress = (xp / xpToNextLevel) * 100;
   const currentStreak = stats?.currentStreak || 0;
 
-  // Calculate skills dynamically based on roadmap object if possible, fallback to global progress
-  let completedSkillsCount = stats?.completedSkills || 0;
-  let totalSkillsInRoadmap = 0;
-  if (roadmapData && roadmapData.levels) {
-    const allSkills = roadmapData.levels.flatMap(l => l.steps);
-    completedSkillsCount = allSkills.filter(s => s.isCompleted).length;
-    totalSkillsInRoadmap = allSkills.length;
-  }
+  // Mark notification as read handler
+  const handleDismissNotification = async (notificationId) => {
+    try {
+      await mentorsApi.markNotificationAsRead(notificationId);
+      setNotifications(notifications.filter(n => n.id !== notificationId));
+    } catch (err) {
+      console.error('Failed to mark notification as read:', err);
+      toast.error('Failed to dismiss notification');
+    }
+  };
+
+  // Get unread notifications
+  const unreadNotifications = notifications.filter(n => !n.isRead);
 
   // Get recent badges (limit to 3)
   const recentBadges = badges
@@ -120,17 +157,15 @@ const DashboardPage = () => {
     .sort((a, b) => new Date(b.earnedAt) - new Date(a.earnedAt))
     .slice(0, 3);
 
-  // Re-map the active domain to our dynamically fetched roadmap.
-  const domainProgressions = stats?.domainProgressions || [];
-  const activeDomain = roadmapData ? {
-    domainName: roadmapData.domainName,
-    skillsCompleted: completedSkillsCount,
-    totalSkills: totalSkillsInRoadmap,
-    progressPercentage: roadmapData.progressPercentage
-  } : domainProgressions.length > 0
-    ? domainProgressions.reduce((prev, current) =>
-      (current.progressPercentage > prev.progressPercentage) ? current : prev
-    )
+  // Get domain progressions from backend (already filtered and accurate)
+  const domainProgressions = (stats?.domainProgressions || []).filter(d => d.totalSkills > 0 && d.skillsCompleted > 0);
+  
+  // Use backend domain progression data for active domain
+  // If roadmapData exists, find matching domain from progressions, otherwise use highest progress domain
+  const activeDomain = roadmapData && domainProgressions.length > 0
+    ? domainProgressions.find(d => d.domainName === roadmapData.domainName) || domainProgressions[0]
+    : domainProgressions.length > 0
+    ? domainProgressions[0]
     : null;
 
 
@@ -157,13 +192,67 @@ const DashboardPage = () => {
         </div>
       </motion.div>
 
+      {/* Announcements */}
+      {unreadNotifications.length > 0 && (
+        <motion.div variants={itemVariants}>
+          <Card className="border-accent/50 bg-accent/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <BellRing className="h-5 w-5 text-accent" />
+                Announcements
+                <Badge variant="secondary" className="ml-auto bg-accent/10 text-accent">
+                  {unreadNotifications.length} New
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {unreadNotifications.slice(0, 3).map((notification) => (
+                <div
+                  key={notification.id}
+                  className="flex items-start gap-3 p-4 rounded-lg bg-background border border-border hover:border-accent/50 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 flex-shrink-0">
+                    <BellRing className="h-5 w-5 text-accent" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{notification.message}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(notification.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => handleDismissNotification(notification.id)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              {unreadNotifications.length > 3 && (
+                <p className="text-xs text-muted-foreground text-center pt-2">
+                  +{unreadNotifications.length - 3} more announcements
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Stats */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="card-hover bg-gradient-to-br from-card to-secondary/30 border-border/50">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10"><Sparkles className="h-6 w-6 text-accent" /></div>
-              <Badge variant="secondary" className="bg-accent/10 text-accent">+150 today</Badge>
+              <Badge variant="secondary" className="bg-accent/10 text-accent">+{stats?.xpEarnedToday || 0} today</Badge>
             </div>
             <div className="mt-4">
               <p className="text-sm text-muted-foreground">Total XP</p>
@@ -204,19 +293,19 @@ const DashboardPage = () => {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"><Target className="h-6 w-6 text-primary" /></div>
-              <Badge variant="secondary">This week: 5</Badge>
+              <Badge variant="secondary">This week: {stats?.skillsCompletedThisWeek || 0}</Badge>
             </div>
             <div className="mt-4">
               <p className="text-sm text-muted-foreground">Skills Completed</p>
-              <p className="text-3xl font-bold">{completedSkillsCount}</p>
+              <p className="text-3xl font-bold">{stats?.completedSkills || 0}</p>
             </div>
           </CardContent>
         </Card>
       </motion.div>
 
       {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <motion.div variants={itemVariants} className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div variants={itemVariants}>
           <Card className="shadow-soft border-border/50">
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
@@ -242,23 +331,25 @@ const DashboardPage = () => {
                     </div>
                   </div>
 
-                  <div className="mt-6">
-                    <h4 className="text-sm font-medium text-muted-foreground mb-3">All Domain Progress</h4>
-                    <div className="space-y-3">
-                      {domainProgressions.map((domain) => (
-                        <div key={domain.id} className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/50 hover:border-accent/50 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10"><Star className="h-4 w-4 text-success" /></div>
-                            <div>
-                              <p className="text-sm font-medium">{domain.domainName}</p>
-                              <p className="text-xs text-muted-foreground">{domain.skillsCompleted} / {domain.totalSkills} skills</p>
+                  {domainProgressions.length > 1 && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-medium text-muted-foreground mb-3">Other Domains</h4>
+                      <div className="space-y-3">
+                        {domainProgressions.slice(1).map((domain) => (
+                          <div key={domain.id} className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/50 hover:border-accent/50 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10"><Star className="h-4 w-4 text-success" /></div>
+                              <div>
+                                <p className="text-sm font-medium">{domain.domainName}</p>
+                                <p className="text-xs text-muted-foreground">{domain.skillsCompleted} / {domain.totalSkills} skills</p>
+                              </div>
                             </div>
+                            <Badge variant="secondary" className="bg-accent/10 text-accent">{Math.round(domain.progressPercentage)}%</Badge>
                           </div>
-                          <Badge variant="secondary" className="bg-accent/10 text-accent">{Math.round(domain.progressPercentage)}%</Badge>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               ) : (
                 <div className="text-center py-12">
@@ -276,18 +367,8 @@ const DashboardPage = () => {
           </Card>
         </motion.div>
 
-        <motion.div variants={itemVariants} className="space-y-6">
-          <Card className="shadow-soft border-border/50">
-            <CardHeader className="pb-3"><CardTitle className="text-lg font-semibold">Quick Actions</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              <Link to="/quiz"><Button variant="outline" className="w-full justify-start h-11"><Sparkles className="mr-3 h-5 w-5 text-accent" />Discover Career Path</Button></Link>
-              <Link to="/roadmap"><Button variant="outline" className="w-full justify-start h-11"><Target className="mr-3 h-5 w-5 text-success" />Continue Learning</Button></Link>
-              <Link to="/mentors"><Button variant="outline" className="w-full justify-start h-11"><Calendar className="mr-3 h-5 w-5 text-primary" />Book a Session</Button></Link>
-              <Link to="/resume"><Button variant="outline" className="w-full justify-start h-11"><BookOpen className="mr-3 h-5 w-5 text-warning" />Update Resume</Button></Link>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-soft border-border/50">
+        <motion.div variants={itemVariants}>
+          <Card className="shadow-soft border-border/50 h-full">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg font-semibold">Recent Badges</CardTitle>
@@ -319,7 +400,44 @@ const DashboardPage = () => {
               )}
             </CardContent>
           </Card>
+        </motion.div>
+      </div>
 
+      {/* Quick Actions & Sessions Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div variants={itemVariants}>
+          <Card className="shadow-soft border-border/50">
+            <CardHeader className="pb-3"><CardTitle className="text-lg font-semibold">Quick Actions</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3">
+              <Link to="/quiz" className="block">
+                <Button variant="outline" className="w-full h-24 flex-col gap-2 hover:border-accent hover:bg-accent/5">
+                  <Sparkles className="h-6 w-6 text-accent" />
+                  <span className="text-sm font-medium">Discover Career</span>
+                </Button>
+              </Link>
+              <Link to="/roadmap" className="block">
+                <Button variant="outline" className="w-full h-24 flex-col gap-2 hover:border-success hover:bg-success/5">
+                  <Target className="h-6 w-6 text-success" />
+                  <span className="text-sm font-medium">Continue Learning</span>
+                </Button>
+              </Link>
+              <Link to="/mentors" className="block">
+                <Button variant="outline" className="w-full h-24 flex-col gap-2 hover:border-primary hover:bg-primary/5">
+                  <Calendar className="h-6 w-6 text-primary" />
+                  <span className="text-sm font-medium">Book Session</span>
+                </Button>
+              </Link>
+              <Link to="/resume" className="block">
+                <Button variant="outline" className="w-full h-24 flex-col gap-2 hover:border-warning hover:bg-warning/5">
+                  <BookOpen className="h-6 w-6 text-warning" />
+                  <span className="text-sm font-medium">Update Resume</span>
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={itemVariants}>
           <Card className="shadow-soft border-border/50">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -328,16 +446,50 @@ const DashboardPage = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {upcomingSessions.map((session) => (
-                <div key={session.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10"><Clock className="h-5 w-5 text-primary" /></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{session.topic}</p>
-                    <p className="text-xs text-muted-foreground">with {session.mentor}</p>
+              {upcomingSessions.length > 0 ? (
+                upcomingSessions.map((session) => (
+                  <div key={session.id} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                      <Clock className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {session.notes || 'Mentorship Session'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">with {session.mentorName}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {session.isPaid ? (
+                        <Badge variant="outline" className="text-xs whitespace-nowrap bg-emerald-100 text-emerald-800 border-emerald-200">
+                          Paid
+                        </Badge>
+                      ) : session.status === 'Approved' ? (
+                        <Button
+                          size="sm"
+                          className="bg-cyan-500 hover:bg-cyan-600 text-white h-8"
+                          onClick={() => navigate('/my-mentors')}
+                        >
+                          💳 Pay Now
+                        </Button>
+                      ) : (
+                        <Badge variant="outline" className="text-xs whitespace-nowrap bg-yellow-100 text-yellow-800 border-yellow-200">
+                          Pending Approval
+                        </Badge>
+                      )}
+
+                      <Badge variant="outline" className="text-xs whitespace-nowrap">
+                        {formatSessionTime(session.scheduledDateTime).split(',')[0]}
+                      </Badge>
+                    </div>
                   </div>
-                  <Badge variant="outline" className="text-xs whitespace-nowrap">{session.time.split(',')[0]}</Badge>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <Calendar className="mx-auto h-8 w-8 text-muted-foreground opacity-50" />
+                  <p className="mt-2 text-sm text-muted-foreground">No upcoming sessions</p>
+                  <p className="text-xs text-muted-foreground">Book a session with a mentor!</p>
                 </div>
-              ))}
+              )}
             </CardContent>
           </Card>
         </motion.div>

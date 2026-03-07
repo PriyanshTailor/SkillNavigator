@@ -142,18 +142,44 @@ const SkillSection = ({ skill, onToggleModule, submitting }) => {
 
 const RoadmapPage = () => {
   const [roadmapData, setRoadmapData] = useState(null);
+  const [roadmapOptions, setRoadmapOptions] = useState([]);
+  const [selectedDomainId, setSelectedDomainId] = useState('');
+  const [selectedSkillId, setSelectedSkillId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchRoadmap = async () => {
+  const fetchRoadmapByDomain = async (domainId) => {
+    if (!domainId) {
+      setRoadmapData(null);
+      return;
+    }
+
+    const res = await roadmapApi.getRoadmapByDomain(domainId);
+    const payload = res.data?.data;
+    setRoadmapData(payload);
+    setSelectedDomainId(payload?.domainId || domainId);
+  };
+
+  const initializeRoadmap = async () => {
     try {
       setLoading(true);
-      const res = await roadmapApi.getMyInterestRoadmap();
-      setRoadmapData(res.data?.data);
+
+      const optionsRes = await roadmapApi.getRoadmapOptions();
+      const options = optionsRes.data?.data || [];
+      setRoadmapOptions(options);
+
+      const recommendedDomainId = options.find(o => o.isRecommended)?.domainId;
+      const initialDomainId = recommendedDomainId || options[0]?.domainId || '';
+
+      if (initialDomainId) {
+        await fetchRoadmapByDomain(initialDomainId);
+      } else {
+        setRoadmapData(null);
+      }
     } catch (err) {
       console.error('Failed to fetch roadmap:', err);
-      setError(err.message || 'Failed to load predicted roadmap.');
+      setError(err.message || 'Failed to load roadmap.');
       toast.error(err.message || 'Failed to load roadmap.');
     } finally {
       setLoading(false);
@@ -161,8 +187,24 @@ const RoadmapPage = () => {
   };
 
   useEffect(() => {
-    fetchRoadmap();
+    initializeRoadmap();
   }, []);
+
+  const handleDomainChange = async (event) => {
+    const domainId = event.target.value;
+    setSelectedDomainId(domainId);
+    setSelectedSkillId('all');
+
+    try {
+      setLoading(true);
+      await fetchRoadmapByDomain(domainId);
+    } catch (err) {
+      console.error('Failed to switch roadmap:', err);
+      toast.error(err.message || 'Failed to switch roadmap');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleToggleModule = async (skillId, moduleId) => {
     try {
@@ -209,7 +251,13 @@ const RoadmapPage = () => {
       toast.success('Module marked as done!');
 
       // Background refetch to ensure DB stats & "Cleared" hiding syncs perfectly
-      setTimeout(() => { fetchRoadmap() }, 1000);
+      setTimeout(async () => {
+        try {
+          await fetchRoadmapByDomain(selectedDomainId || roadmapData?.domainId);
+        } catch {
+          // no-op: optimistic state already applied
+        }
+      }, 1000);
 
     } catch (err) {
       console.error('Failed to update module completion:', err);
@@ -222,9 +270,19 @@ const RoadmapPage = () => {
   // Calculate progress stats
   const progressPercentage = roadmapData?.progressPercentage || 0;
 
-  // To avoid calculating over 'hidden' skills, backend already removed cleared skills.
-  // We just count what is visible right now for the sub-stats.
-  const activeSkills = roadmapData?.skills || [];
+  const allSkills = roadmapData?.skills || [];
+  const activeSkills = selectedSkillId === 'all'
+    ? allSkills
+    : allSkills.filter(skill => skill.skillId === selectedSkillId);
+
+  useEffect(() => {
+    if (selectedSkillId === 'all') return;
+    const exists = allSkills.some(skill => skill.skillId === selectedSkillId);
+    if (!exists) {
+      setSelectedSkillId('all');
+    }
+  }, [allSkills, selectedSkillId]);
+
   let totalModulesInView = 0;
   let completedModulesInView = 0;
 
@@ -266,11 +324,48 @@ const RoadmapPage = () => {
       className="space-y-6"
     >
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Career Roadmap</h1>
-        <p className="text-muted-foreground">
-          Master skills module by module. When a skill is fully complete, it will be cleared from your view!
-        </p>
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Career Roadmap</h1>
+          <p className="text-muted-foreground">
+            Choose a roadmap domain and then pick a learning path to focus your progress.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Choose Roadmap</label>
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+              value={selectedDomainId}
+              onChange={handleDomainChange}
+              disabled={loading || roadmapOptions.length === 0}
+            >
+              {roadmapOptions.map((option) => (
+                <option key={option.domainId} value={option.domainId}>
+                  {option.domainName}{option.isRecommended ? ' (Recommended)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Choose Learning Path</label>
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+              value={selectedSkillId}
+              onChange={(e) => setSelectedSkillId(e.target.value)}
+              disabled={!roadmapData || allSkills.length === 0}
+            >
+              <option value="all">All Learning Paths</option>
+              {allSkills.map((skill) => (
+                <option key={skill.skillId} value={skill.skillId}>
+                  {skill.skillName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Domain Overview Card */}
@@ -284,7 +379,9 @@ const RoadmapPage = () => {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-foreground">{roadmapData.domainName}</h2>
-                  <p className="text-muted-foreground">Your personalized modular journey</p>
+                  <p className="text-muted-foreground">
+                    {selectedSkillId === 'all' ? 'Your personalized modular journey' : 'Focused learning path view'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-6">

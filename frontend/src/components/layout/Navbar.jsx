@@ -1,6 +1,8 @@
 import React from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
+import { useState, useEffect } from 'react';
+import { mentorsApi } from '@/services/api/mentors';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -10,36 +12,136 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import {
   Bell,
-  Search,
   Moon,
   Sun,
   User,
   Settings,
   LogOut,
   ChevronDown,
+  Trophy,
+  Calendar,
+  CheckCircle,
+  MessageCircle,
+  UserCheck,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  useEffect(() => {
+    const handleIncomingNotification = () => {
+      fetchNotifications();
+    };
+
+    window.addEventListener('skillscape:notification-received', handleIncomingNotification);
+
+    return () => {
+      window.removeEventListener('skillscape:notification-received', handleIncomingNotification);
+    };
+  }, []);
+
+  const fetchNotifications = async () => {
+    setLoading(true);
+    try {
+      const response = await mentorsApi.getNotifications();
+      const allNotifications = Array.isArray(response?.data) ? response.data : [];
+      setNotifications(allNotifications.filter(notification => !notification.isRead));
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAsRead = async (notificationId) => {
+    try {
+      await mentorsApi.markNotificationAsRead(notificationId);
+      setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await mentorsApi.markAllNotificationsAsRead();
+      setNotifications([]);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case 'Badge':
+        return <Trophy className="h-4 w-4 text-yellow-500" />;
+      case 'LevelUp':
+        return <Trophy className="h-4 w-4 text-purple-500" />;
+      case 'Session':
+        return <Calendar className="h-4 w-4 text-blue-500" />;
+      case 'Message':
+        return <MessageCircle className="h-4 w-4 text-green-500" />;
+      case 'Enrollment':
+        return <UserCheck className="h-4 w-4 text-indigo-500" />;
+      case 'MentorApproval':
+        return <CheckCircle className="h-4 w-4 text-emerald-500" />;
+      default:
+        return <Bell className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const getNotificationColor = (type) => {
+    switch (type) {
+      case 'Badge':
+        return 'bg-yellow-500/10 text-yellow-500';
+      case 'LevelUp':
+        return 'bg-purple-500/10 text-purple-500';
+      case 'Session':
+        return 'bg-blue-500/10 text-blue-500';
+      case 'Message':
+        return 'bg-green-500/10 text-green-500';
+      case 'Enrollment':
+        return 'bg-indigo-500/10 text-indigo-500';
+      case 'MentorApproval':
+        return 'bg-emerald-500/10 text-emerald-500';
+      default:
+        return 'bg-secondary/10 text-secondary';
+    }
+  };
+
+  const getNotificationTypeLabel = (type) => {
+    return type && type.trim() ? type : 'General';
+  };
+
+  const formatTimeAgo = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} mins ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+    return date.toLocaleDateString();
+  };
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-md px-6">
-      {/* Search Bar */}
-      <div className="flex items-center gap-4 flex-1 max-w-xl">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search skills, mentors, resources..."
-            className="w-full pl-10 bg-secondary/50 border-transparent focus:border-accent focus:bg-background transition-colors"
-          />
-        </div>
-      </div>
+      {/* Empty Left Section */}
+      <div className="flex-1"></div>
 
       {/* Right Section */}
       <div className="flex items-center gap-3">
@@ -62,36 +164,73 @@ export const Navbar = () => {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full relative">
               <Bell className="h-5 w-5 text-muted-foreground" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
-                3
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
+                  {unreadCount}
+                </span>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <DropdownMenuLabel className="flex items-center justify-between">
+              <span>Notifications</span>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {unreadCount} unread
+                  </span>
+                )}
+                {unreadCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={handleMarkAllAsRead}
+                  >
+                    Mark all
+                  </Button>
+                )}
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <div className="max-h-64 overflow-y-auto">
-              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="bg-success/10 text-success text-xs">New Badge</Badge>
+              {loading ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  Loading notifications...
                 </div>
-                <p className="text-sm">You earned the "Quick Learner" badge!</p>
-                <span className="text-xs text-muted-foreground">2 hours ago</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="bg-accent/10 text-accent text-xs">Level Up</Badge>
+              ) : notifications.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  No notifications yet
                 </div>
-                <p className="text-sm">Congratulations! You reached Level 5</p>
-                <span className="text-xs text-muted-foreground">Yesterday</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">Session</Badge>
-                </div>
-                <p className="text-sm">Your mentorship session is in 1 hour</p>
-                <span className="text-xs text-muted-foreground">1 day ago</span>
-              </DropdownMenuItem>
+              ) : (
+                notifications.map((notification) => (
+                  <DropdownMenuItem
+                    key={notification.id}
+                    className={`flex flex-col items-start gap-2 p-3 cursor-pointer ${
+                      !notification.isRead ? 'bg-accent/5' : ''
+                    } hover:bg-cyan-50 dark:hover:bg-cyan-950/40 data-[highlighted]:bg-cyan-50 dark:data-[highlighted]:bg-cyan-950/40 data-[highlighted]:text-foreground focus:bg-cyan-50 dark:focus:bg-cyan-950/40 focus:text-foreground`}
+                    onClick={() => handleMarkAsRead(notification.id)}
+                  >
+                    <div className="flex items-center gap-2 w-full">
+                      {getNotificationIcon(notification.type)}
+                      <Badge
+                        variant="secondary"
+                        className={`${getNotificationColor(notification.type)} text-xs border-transparent`}
+                      >
+                        {getNotificationTypeLabel(notification.type)}
+                      </Badge>
+                      {!notification.isRead && (
+                        <div className="ml-auto h-2 w-2 rounded-full bg-accent" />
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-foreground">{notification.title}</p>
+                    <p className="text-xs text-muted-foreground">{notification.message}</p>
+                    <span className="text-xs text-muted-foreground">
+                      {formatTimeAgo(notification.createdAt)}
+                    </span>
+                  </DropdownMenuItem>
+                ))
+              )}
             </div>
           </DropdownMenuContent>
         </DropdownMenu>

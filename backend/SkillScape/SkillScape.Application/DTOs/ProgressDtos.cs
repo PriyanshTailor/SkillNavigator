@@ -24,6 +24,8 @@ public class UserStatsDto
     public long XPToNextLevel { get; set; }
     public int CurrentStreak { get; set; }
     public int CompletedSkills { get; set; }
+    public long XpEarnedToday { get; set; }
+    public int SkillsCompletedThisWeek { get; set; }
     public List<UserProgressDto> DomainProgressions { get; set; } = new();
 }
 

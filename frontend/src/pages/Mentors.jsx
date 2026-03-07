@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Search, Star, MessageSquare, ChevronRight, Filter, Loader2, Calendar, Send } from "lucide-react";
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Search, MessageSquare, ChevronRight, Filter, Loader2, Calendar, Send } from "lucide-react";
 import { mentorsApi, chatApi } from '@/services/api';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -215,6 +216,8 @@ const ChatWindow = ({ mentor, onClose }) => {
 };
 
 const MentorsPage = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [mentors, setMentors] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -222,7 +225,17 @@ const MentorsPage = () => {
   const [bookingMentor, setBookingMentor] = useState(null);
   const [bookingData, setBookingData] = useState({ topic: '', message: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [selectedSpecializations, setSelectedSpecializations] = useState([]);
+  const [showSpecializations, setShowSpecializations] = useState(false);
   const { user, updateUser } = useAuth();
+
+  // Check for search param from navbar
+  useEffect(() => {
+    const searchParam = searchParams.get('search');
+    if (searchParam) {
+      setSearch(searchParam);
+    }
+  }, [searchParams]);
 
   // Mentor Application state
   const [isApplyOpen, setIsApplyOpen] = useState(false);
@@ -247,7 +260,7 @@ const MentorsPage = () => {
     const fetchMentors = async () => {
       try {
         setLoading(true);
-        const response = await mentorsApi.getAll();
+        const response = await mentorsApi.getAllDetailedForUsers();
         setMentors(response.data || []);
       } catch (err) {
         console.error('Failed to fetch mentors:', err);
@@ -294,7 +307,7 @@ const MentorsPage = () => {
       updateUser({ role: 'Mentor' });
 
       // Update local user state if necessary, or refetch mentors
-      const response = await mentorsApi.getAll();
+      const response = await mentorsApi.getAllDetailedForUsers();
       setMentors(response.data || []);
 
     } catch (err) {
@@ -334,13 +347,43 @@ const MentorsPage = () => {
     return score;
   };
 
-  // Filter mentors: search match AND exclude current user
+  // Get all unique specializations from mentors
+  const getAllSpecializations = () => {
+    const specs = new Set();
+    mentors.forEach(mentor => {
+      mentor.expertise.split(',').forEach(spec => {
+        const trimmed = spec.trim();
+        if (trimmed) specs.add(trimmed);
+      });
+    });
+    return Array.from(specs).sort();
+  };
+
+  // Toggle specialization filter
+  const toggleSpecialization = (spec) => {
+    setSelectedSpecializations(prev =>
+      prev.includes(spec)
+        ? prev.filter(s => s !== spec)
+        : [...prev, spec]
+    );
+  };
+
+  // Filter mentors: search match AND exclude current user AND specialization filter
   const filteredMentors = mentors
-    .filter((m) =>
-      m.userId !== user?.id &&
-      (m.userName.toLowerCase().includes(search.toLowerCase()) ||
-        m.expertise.toLowerCase().includes(search.toLowerCase()))
-    )
+    .filter((m) => {
+      const matchesSearch = m.userId !== user?.id &&
+        (m.userName.toLowerCase().includes(search.toLowerCase()) ||
+          m.expertise.toLowerCase().includes(search.toLowerCase()));
+      
+      if (!matchesSearch) return false;
+
+      // If no specializations selected, show all mentors
+      if (selectedSpecializations.length === 0) return true;
+
+      // Check if mentor has any of the selected specializations
+      const mentorSpecs = m.expertise.split(',').map(s => s.trim());
+      return selectedSpecializations.some(spec => mentorSpecs.includes(spec));
+    })
     .sort((a, b) => calculateMatchScore(b) - calculateMatchScore(a)); // Sort by match score descending
 
   // Show loading state
@@ -426,7 +469,7 @@ const MentorsPage = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Hourly Rate ($)</label>
+                  <label className="text-sm font-medium">Hourly Rate (₹)</label>
                   <Input
                     type="number"
                     min="0"
@@ -457,10 +500,48 @@ const MentorsPage = () => {
           />
         </div>
 
-        <button className="flex items-center gap-2 px-4 py-2 border rounded-lg bg-white shadow-sm">
-          <Filter className="w-4 h-4" />
-          All Specializations
-        </button>
+        <div className="relative">
+          <button 
+            onClick={() => setShowSpecializations(!showSpecializations)}
+            className="flex items-center gap-2 px-4 py-2 border rounded-lg bg-white shadow-sm hover:bg-gray-50 transition"
+          >
+            <Filter className="w-4 h-4" />
+            <span>
+              {selectedSpecializations.length > 0
+                ? `${selectedSpecializations.length} Selected`
+                : 'All Specializations'}
+            </span>
+          </button>
+
+          {showSpecializations && (
+            <div className="absolute top-full right-0 mt-2 bg-white border rounded-lg shadow-lg z-10 min-w-[250px] max-w-[400px]">
+              <div className="p-3 border-b flex justify-between items-center">
+                <span className="font-semibold text-sm">Filter by Specialization</span>
+                {selectedSpecializations.length > 0 && (
+                  <button
+                    onClick={() => setSelectedSpecializations([])}
+                    className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+              <div className="max-h-[300px] overflow-y-auto p-3 space-y-2">
+                {getAllSpecializations().map((spec) => (
+                  <label key={spec} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input
+                      type="checkbox"
+                      checked={selectedSpecializations.includes(spec)}
+                      onChange={() => toggleSpecialization(spec)}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-700">{spec}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Mentor Grid */}
@@ -515,45 +596,50 @@ const MentorsPage = () => {
                 ))}
               </div>
 
-              {/* Rating */}
+              {/* Students Assigned */}
               <div className="flex justify-between text-sm mb-4">
-                <div className="flex items-center gap-1 text-yellow-500">
-                  <Star className="w-4 h-4 fill-yellow-500" />
-                  <span className="text-gray-800 font-medium">{mentor.avgRating.toFixed(1)}</span>
-                </div>
-                <div className="flex items-center gap-1 text-gray-500">
-                  <MessageSquare className="w-4 h-4" />
-                  {mentor.totalSessionCount} sessions
+                <div className="flex items-center gap-1 text-blue-500">
+                  <span className="text-gray-800 font-medium">{mentor.totalStudentsAssigned || 0}</span>
+                  <span className="text-gray-500 text-xs">students</span>
                 </div>
               </div>
 
               {/* Price + Button */}
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center gap-2">
                 <div>
                   <span className="text-lg font-bold text-gray-800">
-                    ${mentor.hourlyRate}
+                    ₹{mentor.hourlyRate}
                   </span>
                   <span className="text-sm text-gray-500">/hr</span>
                 </div>
 
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <button
-                      onClick={() => setBookingMentor(mentor)}
-                      className="bg-teal-500 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-teal-600 transition"
-                      disabled={!mentor.isAvailable}
-                    >
-                      Chat & Connect
-                      <MessageSquare className="w-4 h-4 ml-1" />
-                    </button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl p-0 overflow-hidden border-none outline-none">
-                    <DialogTitle className="sr-only">Chat with {mentor.userName}</DialogTitle>
-                    {bookingMentor?.id === mentor.id && (
-                      <ChatWindow mentor={mentor} onClose={() => setBookingMentor(null)} />
-                    )}
-                  </DialogContent>
-                </Dialog>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => navigate(`/mentor/${mentor.id}`)}
+                    className="bg-cyan-500 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-cyan-600 transition"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                    Profile
+                  </button>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <button
+                        onClick={() => setBookingMentor(mentor)}
+                        className="bg-teal-500 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-teal-600 transition"
+                        disabled={!mentor.isAvailable}
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        Chat
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl p-0 overflow-hidden border-none outline-none">
+                      <DialogTitle className="sr-only">Chat with {mentor.userName}</DialogTitle>
+                      {bookingMentor?.id === mentor.id && (
+                        <ChatWindow mentor={mentor} onClose={() => setBookingMentor(null)} />
+                      )}
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
             </div>
           );

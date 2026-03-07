@@ -10,11 +10,13 @@ public class AuthService : IAuthService
 {
     private readonly ApplicationDbContext _context;
     private readonly ITokenService _tokenService;
+    private readonly IEmailService _emailService;
 
-    public AuthService(ApplicationDbContext context, ITokenService tokenService)
+    public AuthService(ApplicationDbContext context, ITokenService tokenService, IEmailService emailService)
     {
         _context = context;
         _tokenService = tokenService;
+        _emailService = emailService;
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -23,6 +25,9 @@ public class AuthService : IAuthService
 
         if (user == null)
             throw new UnauthorizedAccessException("Invalid email or password");
+
+        if (user.IsBlocked)
+            throw new UnauthorizedAccessException($"Your account is blocked. {user.BlockedReason}");
 
         // In production, use BCrypt or ASP.NET Identity for password hashing
         // For demo, we'll accept any password
@@ -34,6 +39,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             FullName = user.FullName,
             Role = user.Role,
+            ProfileCompleted = user.ProfileCompleted,
             Token = token,
             ExpiresAt = DateTime.UtcNow.AddMinutes(60)
         };
@@ -54,6 +60,9 @@ public class AuthService : IAuthService
             Email = request.Email,
             FullName = request.FullName,
             Role = request.Role,
+            ProfileCompleted = false,
+            IsBlocked = false,
+            BlockedReason = null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             IsActive = true
@@ -70,6 +79,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             FullName = user.FullName,
             Role = user.Role,
+            ProfileCompleted = user.ProfileCompleted,
             Token = token,
             ExpiresAt = DateTime.UtcNow.AddMinutes(60)
         };
@@ -124,6 +134,7 @@ public class AuthService : IAuthService
             Bio = user.Bio,
             ProfileImageUrl = user.ProfileImageUrl,
             Role = user.Role,
+            ProfileCompleted = user.ProfileCompleted,
             Level = user.Level,
             TotalXP = user.TotalXP,
             CurrentStreak = user.CurrentStreak,
@@ -137,6 +148,64 @@ public class AuthService : IAuthService
             ?? throw new InvalidOperationException("User not found");
 
         _context.Users.Remove(user);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<string> ForgotPasswordAsync(ForgotPasswordRequest request)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+
+        if (user == null)
+        {
+            // For security, don't reveal if user exists or not
+            // Just return success (but don't send email)
+            return "If an account exists with this email, a reset link has been sent.";
+        }
+
+        // Generate a random token
+        var token = Guid.NewGuid().ToString("N");
+
+        // Store token and expiry (valid for 1 hour)
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        _context.Users.Update(user);
+        await _context.SaveChangesAsync();
+
+        // Send password reset email
+        try
+        {
+            await _emailService.SendPasswordResetEmailAsync(user.Email, user.FullName, token);
+            return "If an account exists with this email, a reset link has been sent.";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to send email: {ex.Message}");
+            // Still return success for security, but log the error
+            return "If an account exists with this email, a reset link has been sent.";
+        }
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.PasswordResetToken == request.Token);
+
+        if (user == null)
+            throw new InvalidOperationException("Invalid or expired reset token");
+
+        if (user.PasswordResetTokenExpiry == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+            throw new InvalidOperationException("Reset token has expired");
+
+        // In production, hash the new password
+        // For demo, we'll just accept any password
+
+        // Clear the reset token
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        _context.Users.Update(user);
         await _context.SaveChangesAsync();
     }
 }

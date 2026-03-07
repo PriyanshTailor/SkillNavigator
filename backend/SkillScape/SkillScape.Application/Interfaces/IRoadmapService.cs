@@ -12,6 +12,16 @@ public interface IRoadmapService
     Task<RoadmapDto> GetMyRoadmapAsync(string userId);
 
     /// <summary>
+    /// Gets available roadmap domains for the user to switch between.
+    /// </summary>
+    Task<List<RoadmapOptionDto>> GetRoadmapOptionsAsync(string userId);
+
+    /// <summary>
+    /// Gets roadmap for a specific selected career domain.
+    /// </summary>
+    Task<RoadmapDto> GetRoadmapByDomainAsync(string userId, string domainId);
+
+    /// <summary>
     /// Marks a specific roadmap step (Skill) as Complete, updating UserSkill and UserProgress.
     /// </summary>
     Task<bool> MarkStepCompleteAsync(string userId, string stepId);

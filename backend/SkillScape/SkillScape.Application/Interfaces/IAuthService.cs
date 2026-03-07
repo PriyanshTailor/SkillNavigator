@@ -13,4 +13,6 @@ public interface IAuthService
     Task<UserProfileDto> UpdateProfileAsync(string userId, UpdateProfileRequest request);
     Task ChangePasswordAsync(string userId, ChangePasswordRequest request);
     Task DeleteAccountAsync(string userId);
+    Task<string> ForgotPasswordAsync(ForgotPasswordRequest request);
+    Task ResetPasswordAsync(ResetPasswordRequest request);
 }

@@ -20,22 +20,77 @@ public class ProgressService : IProgressService
     public async Task<UserStatsDto> GetUserStatsAsync(string userId)
     {
         var user = await _context.Users
-            .Include(u => u.UserProgressions)
             .Include(u => u.UserSkills)
             .FirstOrDefaultAsync(u => u.Id == userId)
             ?? throw new InvalidOperationException("User not found");
 
-        var progressions = user.UserProgressions
-            .Select(p => new UserProgressDto
+        var utcToday = DateTime.UtcNow.Date;
+        var utcTomorrow = utcToday.AddDays(1);
+        var weekStart = utcToday.AddDays(-((7 + (int)utcToday.DayOfWeek - (int)DayOfWeek.Monday) % 7));
+
+        var currentStreak = await CalculateLearningStreakAsync(userId, DateTime.UtcNow);
+        if (user.CurrentStreak != currentStreak)
+        {
+            user.CurrentStreak = currentStreak;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        var xpEarnedToday = await _context.UserSkills
+            .Where(us => us.UserId == userId && us.IsCompleted && us.CompletedAt.HasValue
+                && us.CompletedAt.Value >= utcToday
+                && us.CompletedAt.Value < utcTomorrow)
+            .Join(
+                _context.Skills,
+                userSkill => userSkill.SkillId,
+                skill => skill.Id,
+                (_, skill) => (long)skill.XPReward
+            )
+            .SumAsync();
+
+        var skillsCompletedThisWeek = await _context.UserSkills
+            .CountAsync(us => us.UserId == userId && us.IsCompleted && us.CompletedAt.HasValue
+                && us.CompletedAt.Value >= weekStart
+                && us.CompletedAt.Value < utcTomorrow);
+
+        // Calculate domain progressions dynamically from all domains
+        var allDomains = await _context.CareerDomains
+            .Include(d => d.Skills)
+            .ToListAsync();
+
+        var userCompletedSkills = await _context.UserSkills
+            .Include(us => us.Skill)
+            .Where(us => us.UserId == userId && us.IsCompleted)
+            .Select(us => new { us.SkillId, us.Skill.CareerDomainId, us.Skill.XPReward })
+            .ToListAsync();
+
+        var progressions = allDomains
+            .Where(domain => domain.Skills.Count > 0)
+            .Select(domain =>
             {
-                Id = p.Id,
-                DomainId = p.CareerDomainId,
-                DomainName = p.CareerDomain?.Name ?? "",
-                XPInDomain = p.XPInDomain,
-                SkillsCompleted = p.SkillsCompleted,
-                TotalSkills = p.TotalSkills,
-                ProgressPercentage = p.ProgressPercentage
+                var totalSkillsInDomain = domain.Skills.Count;
+                var completedSkillsInDomain = userCompletedSkills
+                    .Count(us => us.CareerDomainId == domain.Id);
+                var xpInDomain = userCompletedSkills
+                    .Where(us => us.CareerDomainId == domain.Id)
+                    .Sum(us => (long)us.XPReward);
+                var progressPercentage = totalSkillsInDomain > 0
+                    ? (completedSkillsInDomain / (double)totalSkillsInDomain) * 100
+                    : 0;
+
+                return new UserProgressDto
+                {
+                    Id = domain.Id,
+                    DomainId = domain.Id,
+                    DomainName = domain.Name,
+                    XPInDomain = xpInDomain,
+                    SkillsCompleted = completedSkillsInDomain,
+                    TotalSkills = totalSkillsInDomain,
+                    ProgressPercentage = progressPercentage
+                };
             })
+            .Where(p => p.SkillsCompleted > 0)
+            .OrderByDescending(p => p.ProgressPercentage)
             .ToList();
 
         var xpToNextLevel = (user.Level * XP_PER_LEVEL) - user.TotalXP;
@@ -45,10 +100,64 @@ public class ProgressService : IProgressService
             Level = user.Level,
             TotalXP = user.TotalXP,
             XPToNextLevel = xpToNextLevel,
-            CurrentStreak = user.CurrentStreak,
+            CurrentStreak = currentStreak,
             CompletedSkills = (int)user.UserSkills.Count(us => us.IsCompleted),
+            XpEarnedToday = xpEarnedToday,
+            SkillsCompletedThisWeek = skillsCompletedThisWeek,
             DomainProgressions = progressions
         };
+    }
+
+    private async Task<int> CalculateLearningStreakAsync(string userId, DateTime utcNow)
+    {
+        var today = utcNow.Date;
+
+        var skillActivityDays = await _context.UserSkills
+            .Where(us => us.UserId == userId && us.IsCompleted && us.CompletedAt.HasValue)
+            .Select(us => us.CompletedAt!.Value.Date)
+            .ToListAsync();
+
+        var moduleActivityDays = await _context.UserModuleProgressions
+            .Where(ump => ump.UserId == userId && ump.IsCompleted && ump.CompletedAt.HasValue)
+            .Select(ump => ump.CompletedAt!.Value.Date)
+            .ToListAsync();
+
+        var quizActivityDays = await _context.QuizResponses
+            .Where(qr => qr.UserId == userId)
+            .Select(qr => qr.AnsweredAt.Date)
+            .ToListAsync();
+
+        var activityDays = skillActivityDays
+            .Concat(moduleActivityDays)
+            .Concat(quizActivityDays)
+            .Distinct()
+            .ToHashSet();
+
+        if (activityDays.Count == 0)
+        {
+            return 0;
+        }
+
+        var startDate = activityDays.Contains(today)
+            ? today
+            : activityDays.Contains(today.AddDays(-1))
+                ? today.AddDays(-1)
+                : DateTime.MinValue;
+
+        if (startDate == DateTime.MinValue)
+        {
+            return 0;
+        }
+
+        var streak = 0;
+        var cursor = startDate;
+        while (activityDays.Contains(cursor))
+        {
+            streak++;
+            cursor = cursor.AddDays(-1);
+        }
+
+        return streak;
     }
 
     public async Task CompleteSkillAsync(string userId, string skillId)
@@ -97,10 +206,13 @@ public class ProgressService : IProgressService
         user.TotalXP += xpReward;
 
         // Update level
+        var oldLevel = user.Level;
         var newLevel = (int)(user.TotalXP / XP_PER_LEVEL) + 1;
         if (newLevel > user.Level)
         {
             user.Level = newLevel;
+            // Notify user about level up
+            await CreateNotificationAsync(userId, "LevelUp", "Level Up!", $"Congratulations! You've reached Level {newLevel}!");
         }
 
         // Update domain progress
@@ -191,6 +303,9 @@ public class ProgressService : IProgressService
                     BadgeId = badge.Id,
                     EarnedAt = DateTime.UtcNow
                 });
+                
+                // Notify user about badge earned
+                await CreateNotificationAsync(userId, "Badge", "New Badge Earned!", $"Congratulations! You've earned the \"{badge.Name}\" badge!");
             }
         }
     }
@@ -205,8 +320,8 @@ public class ProgressService : IProgressService
         var leaderboard = new List<LeaderboardUserDto>();
         int rank = 1;
         
-        // Random avatars since we don't have a real avatar column yet
-        var avatars = new[] { "👨‍💻", "👩‍💻", "👨", "👩‍🎓", "🎯", "🌟", "🚀", "💡" };
+        // Fallback avatars for users without profile images
+        var fallbackAvatars = new[] { "👨‍💻", "👩‍💻", "👨", "👩‍🎓", "🎯", "🌟", "🚀", "💡" };
 
         foreach (var user in topUsers)
         {
@@ -217,7 +332,9 @@ public class ProgressService : IProgressService
                 Xp = user.TotalXP,
                 Level = user.Level,
                 IsUser = user.Id == currentUserId,
-                Avatar = avatars[rank % avatars.Length]
+                Avatar = !string.IsNullOrWhiteSpace(user.ProfileImageUrl) 
+                    ? user.ProfileImageUrl 
+                    : fallbackAvatars[(rank - 1) % fallbackAvatars.Length]
             });
             rank++;
         }
@@ -236,11 +353,30 @@ public class ProgressService : IProgressService
                     Xp = currentUser.TotalXP,
                     Level = currentUser.Level,
                     IsUser = true,
-                    Avatar = avatars[userRank % avatars.Length]
+                    Avatar = !string.IsNullOrWhiteSpace(currentUser.ProfileImageUrl) 
+                        ? currentUser.ProfileImageUrl 
+                        : fallbackAvatars[(userRank - 1) % fallbackAvatars.Length]
                 });
             }
         }
 
         return leaderboard;
+    }
+
+    // Helper method to create notifications
+    private async Task CreateNotificationAsync(string userId, string type, string title, string message)
+    {
+        var notification = new Notification
+        {
+            UserId = userId,
+            Type = type,
+            Title = title,
+            Message = message,
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.Notifications.Add(notification);
+        await _context.SaveChangesAsync();
     }
 }

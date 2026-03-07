@@ -30,7 +30,7 @@ export const ProtectedRoute = ({ children, roles, redirectTo = '/login' }) => {
 };
 
 export const PublicRoute = ({ children, redirectTo = '/dashboard' }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -45,7 +45,8 @@ export const PublicRoute = ({ children, redirectTo = '/dashboard' }) => {
   }
 
   if (isAuthenticated) {
-    const from = (location && location.state && location.state.from && location.state.from.pathname) || redirectTo;
+    const defaultRedirect = user?.role === 'Admin' ? '/admin' : redirectTo;
+    const from = (location && location.state && location.state.from && location.state.from.pathname) || defaultRedirect;
     return <Navigate to={from} replace />;
   }
 

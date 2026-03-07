@@ -38,10 +38,15 @@ export const DashboardLayout = () => {
           console.log("Global Notification Hub Connected");
 
           connection.on("ReceiveNotification", (notification) => {
+            window.dispatchEvent(new CustomEvent('skillscape:notification-received', {
+              detail: notification
+            }));
+
             if (notification.type === 'achievement') {
               toast.success(`${notification.title} - ${notification.message}`, { duration: 5000 });
             } else if (notification.type === 'chat') {
               toast(notification.title, {
+                duration: 5000,
                 description: (
                   <div className="flex flex-col gap-2">
                     <span className="text-sm text-gray-600">{notification.message !== "Sent an image" ? notification.message : "Sent an image"}</span>
@@ -60,7 +65,7 @@ export const DashboardLayout = () => {
                 },
               });
             } else {
-              toast.info(`${notification.title} - ${notification.message}`);
+              toast.info(`${notification.title} - ${notification.message}`, { duration: 5000 });
             }
           });
         })

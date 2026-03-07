@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { chatApi } from '@/services/api';
 import { getAuthToken } from '@/services/api';
@@ -19,6 +19,36 @@ const ChatWindow = ({ contact, onClose, onMessagesRead }) => {
     const [selectedImage, setSelectedImage] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const messagesEndRef = useRef(null);
+    const activeContactIdRef = useRef(contact.otherUserId);
+    const isMarkingReadRef = useRef(false);
+    const lastMarkReadAtRef = useRef(0);
+
+    useEffect(() => {
+        activeContactIdRef.current = contact.otherUserId;
+    }, [contact.otherUserId]);
+
+    const markCurrentConversationAsRead = useCallback(async (force = false) => {
+        const otherUserId = activeContactIdRef.current;
+        if (!otherUserId) return;
+
+        const now = Date.now();
+        if (!force && (isMarkingReadRef.current || now - lastMarkReadAtRef.current < 800)) {
+            return;
+        }
+
+        try {
+            isMarkingReadRef.current = true;
+            await chatApi.markAsRead(otherUserId);
+            lastMarkReadAtRef.current = Date.now();
+            if (onMessagesRead) {
+                onMessagesRead(otherUserId);
+            }
+        } catch (err) {
+            console.error("Failed to mark as read:", err);
+        } finally {
+            isMarkingReadRef.current = false;
+        }
+    }, [onMessagesRead]);
 
     useEffect(() => {
         const fetchHistory = async () => {
@@ -33,12 +63,9 @@ const ChatWindow = ({ contact, onClose, onMessagesRead }) => {
 
         // Mark as read when opening chat
         if (contact.unreadCount > 0) {
-            chatApi.markAsRead(contact.otherUserId).catch(err => console.error("Failed to mark as read:", err));
-            if (onMessagesRead) {
-                onMessagesRead(contact.otherUserId);
-            }
+            markCurrentConversationAsRead(true);
         }
-    }, [contact.otherUserId, contact.unreadCount, onMessagesRead]);
+    }, [contact.otherUserId, contact.unreadCount, markCurrentConversationAsRead]);
 
     useEffect(() => {
         const token = getAuthToken();
@@ -62,11 +89,12 @@ const ChatWindow = ({ contact, onClose, onMessagesRead }) => {
                 .then(() => {
                     connection.invoke("JoinChat", contact.otherUserId);
 
+                    connection.off("ReceiveMessage");
                     connection.on("ReceiveMessage", (message) => {
                         setMessages(prev => [...prev, message]);
                         // If we are currently in the chat with this user, mark as read immediately
-                        if (message.senderId === contact.otherUserId) {
-                            chatApi.markAsRead(contact.otherUserId).catch(console.error);
+                        if (message.senderId === activeContactIdRef.current) {
+                            markCurrentConversationAsRead();
                         }
                     });
                 })
@@ -80,7 +108,7 @@ const ChatWindow = ({ contact, onClose, onMessagesRead }) => {
                 }
             };
         }
-    }, [connection, contact.otherUserId]);
+    }, [connection, contact.otherUserId, markCurrentConversationAsRead]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -248,11 +276,11 @@ const Messages = () => {
     const [search, setSearch] = useState('');
     const [selectedContact, setSelectedContact] = useState(null);
 
-    const handleMessagesRead = (otherUserId) => {
+    const handleMessagesRead = useCallback((otherUserId) => {
         setConversations(prev => prev.map(c =>
             c.otherUserId === otherUserId ? { ...c, unreadCount: 0 } : c
         ));
-    };
+    }, []);
 
     const fetchConversations = async () => {
         try {

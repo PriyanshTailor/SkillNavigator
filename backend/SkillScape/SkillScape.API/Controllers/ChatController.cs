@@ -19,6 +19,61 @@ public class ChatController : ControllerBase
         _context = context;
     }
 
+    public class SendChatMessageRequest
+    {
+        public string ReceiverId { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string? ImageUrl { get; set; }
+    }
+
+    [HttpPost("send")]
+    public async Task<ActionResult<ApiResponse<object>>> SendMessage([FromBody] SendChatMessageRequest request)
+    {
+        try
+        {
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(currentUserId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("User not authenticated"));
+
+            if (string.IsNullOrWhiteSpace(request.ReceiverId) ||
+                (string.IsNullOrWhiteSpace(request.Message) && string.IsNullOrWhiteSpace(request.ImageUrl)))
+            {
+                return BadRequest(ApiResponse<object>.ErrorResponse("ReceiverId and message or image is required"));
+            }
+
+            var chatMessage = new SkillScape.Domain.Entities.ChatMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                SenderId = currentUserId,
+                ReceiverId = request.ReceiverId,
+                Content = request.Message,
+                ImageUrl = request.ImageUrl,
+                SentAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            _context.ChatMessages.Add(chatMessage);
+            await _context.SaveChangesAsync();
+
+            var responseData = new
+            {
+                chatMessage.Id,
+                chatMessage.SenderId,
+                chatMessage.ReceiverId,
+                Message = chatMessage.Content,
+                chatMessage.ImageUrl,
+                Timestamp = chatMessage.SentAt,
+                chatMessage.IsRead
+            };
+
+            return Ok(ApiResponse<object>.SuccessResponse(responseData, "Message sent"));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiResponse<object>.ErrorResponse(ex.Message));
+        }
+    }
+
     [HttpGet("history/{otherUserId}")]
     public async Task<ActionResult<ApiResponse<List<object>>>> GetChatHistory(string otherUserId, [FromQuery] int page = 1, [FromQuery] int limit = 50)
     {
@@ -155,6 +210,12 @@ public class ChatController : ControllerBase
         {
             return StatusCode(500, ApiResponse<List<object>>.ErrorResponse(ex.Message));
         }
+    }
+
+    [HttpGet("conversation")]
+    public async Task<ActionResult<ApiResponse<List<object>>>> GetConversationAlias()
+    {
+        return await GetConversations();
     }
 
     [HttpPost("upload")]

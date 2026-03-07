@@ -19,7 +19,6 @@ public class RoadmapService : IRoadmapService
 
     public async Task<RoadmapDto> GetMyRoadmapAsync(string userId)
     {
-        // 1. Get User's Predicted Domain Interest
         var latestResult = await _context.QuizResults
             .Where(r => r.UserId == userId)
             .OrderByDescending(r => r.CompletedAt)
@@ -28,35 +27,73 @@ public class RoadmapService : IRoadmapService
         if (latestResult == null)
             throw new InvalidOperationException("No career interest predicted yet. Please take the quiz first.");
 
-        var targetDomainId = latestResult.RecommendedDomainId;
-        var domain = await _context.CareerDomains.FindAsync(targetDomainId);
+        return await BuildRoadmapAsync(userId, latestResult.RecommendedDomainId);
+    }
+
+    public async Task<List<RoadmapOptionDto>> GetRoadmapOptionsAsync(string userId)
+    {
+        var latestResult = await _context.QuizResults
+            .Where(r => r.UserId == userId)
+            .OrderByDescending(r => r.CompletedAt)
+            .FirstOrDefaultAsync();
+
+        var recommendedDomainId = latestResult?.RecommendedDomainId;
+
+        var domains = await _context.CareerDomains
+            .Where(d => d.IsActive)
+            .OrderBy(d => d.Name)
+            .Select(d => new { d.Id, d.Name })
+            .ToListAsync();
+
+        var userProgressByDomain = await _context.UserProgressions
+            .Where(p => p.UserId == userId)
+            .ToDictionaryAsync(p => p.CareerDomainId, p => p.ProgressPercentage);
+
+        return domains
+            .Select(d => new RoadmapOptionDto
+            {
+                DomainId = d.Id,
+                DomainName = d.Name,
+                ProgressPercentage = userProgressByDomain.TryGetValue(d.Id, out var progress) ? progress : 0,
+                IsRecommended = !string.IsNullOrEmpty(recommendedDomainId) && d.Id == recommendedDomainId
+            })
+            .ToList();
+    }
+
+    public async Task<RoadmapDto> GetRoadmapByDomainAsync(string userId, string domainId)
+    {
+        if (string.IsNullOrWhiteSpace(domainId))
+            throw new InvalidOperationException("Domain is required.");
+
+        return await BuildRoadmapAsync(userId, domainId);
+    }
+
+    private async Task<RoadmapDto> BuildRoadmapAsync(string userId, string domainId)
+    {
+        var domain = await _context.CareerDomains
+            .Where(d => d.Id == domainId && d.IsActive)
+            .FirstOrDefaultAsync();
 
         if (domain == null)
-             throw new InvalidOperationException("Domain not found.");
+            throw new InvalidOperationException("Domain not found.");
 
-        // 2. Calculate current domain progress
         var currentProgress = await _context.UserProgressions
-            .FirstOrDefaultAsync(p => p.UserId == userId && p.CareerDomainId == targetDomainId);
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.CareerDomainId == domainId);
 
-        double progressPercentage = currentProgress?.ProgressPercentage ?? 0;
+        var progressPercentage = currentProgress?.ProgressPercentage ?? 0;
 
-        // 3. Fetch all active skills for the domain
         var skills = await _context.Skills
-            .Where(s => s.CareerDomainId == targetDomainId && s.IsActive)
+            .Where(s => s.CareerDomainId == domainId && s.IsActive)
             .OrderBy(s => s.DisplayOrder)
             .ToListAsync();
 
-        // Fetch UserSkills to see what is cleared
         var userSkills = await _context.UserSkills
             .Where(us => us.UserId == userId)
             .ToListAsync();
-            
-        var clearedSkillIds = userSkills.Where(us => us.IsCleared).Select(us => us.SkillId).ToHashSet();
 
-        // 4. Fetch Modules (RoadmapSteps) and Topics for these skills
         var modules = await _context.RoadmapSteps
             .Include(r => r.Topics)
-            .Where(r => r.CareerDomainId == targetDomainId && r.IsActive)
+            .Where(r => r.CareerDomainId == domainId && r.IsActive)
             .OrderBy(r => r.StepNumber)
             .ToListAsync();
 
@@ -64,12 +101,12 @@ public class RoadmapService : IRoadmapService
             .Where(ump => ump.UserId == userId && ump.IsCompleted)
             .Select(ump => ump.ModuleId)
             .ToListAsync();
+
         var moduleProgressions = progressionsList.ToHashSet();
 
-        // 6. Build presentation DTO
         var roadmapDto = new RoadmapDto
         {
-            DomainId = targetDomainId,
+            DomainId = domainId,
             DomainName = domain.Name,
             ProgressPercentage = progressPercentage,
             Skills = new List<SkillRoadmapDto>()
@@ -77,9 +114,6 @@ public class RoadmapService : IRoadmapService
 
         foreach (var skill in skills)
         {
-            // We want to show cleared skills in the UI now, so we don't skip them
-            // if (clearedSkillIds.Contains(skill.Id)) continue;
-            
             var skillUserProgress = userSkills.FirstOrDefault(us => us.SkillId == skill.Id);
 
             var skillDto = new SkillRoadmapDto

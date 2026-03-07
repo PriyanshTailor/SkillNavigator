@@ -15,7 +15,11 @@ using Microsoft.Extensions.ML;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+});
 
 // Add AutoMapper
 builder.Services.AddAutoMapper(typeof(Program).Assembly);
@@ -30,13 +34,16 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // Add Application Services
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDomainService, DomainService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IRoadmapService, RoadmapService>();
 builder.Services.AddScoped<IProgressService, ProgressService>();
 builder.Services.AddScoped<IMentorService, MentorService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IResumeService, ResumeService>();
 builder.Services.AddHttpClient<ITrendService, TrendService>();
 

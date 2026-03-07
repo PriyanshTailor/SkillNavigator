@@ -22,10 +22,54 @@ namespace SkillScape.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("SkillScape.Domain.Entities.AdminAuditLog", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("AdminId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("TargetEntity")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("TargetEntityId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdminId");
+
+                    b.ToTable("AdminAuditLogs");
+                });
+
             modelBuilder.Entity("SkillScape.Domain.Entities.ApplicationMentor", b =>
                 {
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ApprovedByAdminId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("AvailabilitySchedule")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<double>("AvgRating")
                         .HasColumnType("float");
@@ -36,16 +80,46 @@ namespace SkillScape.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("CurrentCompany")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<string>("Expertise")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<string>("ExpertiseArea")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<decimal>("HourlyRate")
+                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("bit");
+
+                    b.Property<string>("LinkedInUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal?>("SessionPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("SkillsCsv")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<int>("TotalSessionCount")
                         .HasColumnType("int");
@@ -73,6 +147,10 @@ namespace SkillScape.Infrastructure.Migrations
                     b.Property<string>("Bio")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("BlockedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -92,8 +170,20 @@ namespace SkillScape.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsBlocked")
+                        .HasColumnType("bit");
+
                     b.Property<int>("Level")
                         .HasColumnType("int");
+
+                    b.Property<string>("PasswordResetToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("PasswordResetTokenExpiry")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("ProfileCompleted")
+                        .HasColumnType("bit");
 
                     b.Property<string>("ProfileImageUrl")
                         .HasColumnType("nvarchar(max)");
@@ -274,6 +364,225 @@ namespace SkillScape.Infrastructure.Migrations
                     b.HasIndex("StudentId");
 
                     b.ToTable("MentorRequests");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.MentorSession", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MeetingLink")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("MentorId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("ScheduledDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("StudentId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MentorId");
+
+                    b.HasIndex("StudentId");
+
+                    b.ToTable("MentorSessions");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.MentorSessionPriceHistory", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MentorId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<decimal>("SessionPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MentorId", "EffectiveFrom");
+
+                    b.ToTable("MentorSessionPriceHistory");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.MentorshipProgress", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ApprovalStatus")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CompletedTasks")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MentorFeedback")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MentorId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("NextMilestone")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PaymentMethod")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PaymentStatus")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RoadmapStage")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("StudentId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MentorId");
+
+                    b.HasIndex("StudentId", "MentorId")
+                        .IsUnique();
+
+                    b.ToTable("MentorshipProgressEntries");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.Notification", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MentorshipProgressId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SessionId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("StudentId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MentorshipProgressId");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("StudentId");
+
+                    b.ToTable("PaymentTransactions");
                 });
 
             modelBuilder.Entity("SkillScape.Domain.Entities.QuizOption", b =>
@@ -494,6 +803,80 @@ namespace SkillScape.Infrastructure.Migrations
                     b.ToTable("RoadmapTopics");
                 });
 
+            modelBuilder.Entity("SkillScape.Domain.Entities.SessionComplaint", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ReportedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportedBy");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("SessionComplaints");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.SessionFeedback", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MentorId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReviewText")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MentorId");
+
+                    b.HasIndex("SessionId")
+                        .IsUnique();
+
+                    b.ToTable("SessionFeedbacks");
+                });
+
             modelBuilder.Entity("SkillScape.Domain.Entities.Skill", b =>
                 {
                     b.Property<string>("Id")
@@ -537,6 +920,33 @@ namespace SkillScape.Infrastructure.Migrations
                     b.HasIndex("CareerDomainId");
 
                     b.ToTable("Skills");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.StudentWallet", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<decimal>("Balance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StudentId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId")
+                        .IsUnique();
+
+                    b.ToTable("StudentWallets");
                 });
 
             modelBuilder.Entity("SkillScape.Domain.Entities.UserBadge", b =>
@@ -676,6 +1086,17 @@ namespace SkillScape.Infrastructure.Migrations
                     b.ToTable("UserSkills");
                 });
 
+            modelBuilder.Entity("SkillScape.Domain.Entities.AdminAuditLog", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "Admin")
+                        .WithMany()
+                        .HasForeignKey("AdminId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Admin");
+                });
+
             modelBuilder.Entity("SkillScape.Domain.Entities.ApplicationMentor", b =>
                 {
                     b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "User")
@@ -721,6 +1142,92 @@ namespace SkillScape.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Mentor");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.MentorSession", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationMentor", "Mentor")
+                        .WithMany("Sessions")
+                        .HasForeignKey("MentorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "Student")
+                        .WithMany("StudentSessions")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Mentor");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.MentorSessionPriceHistory", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationMentor", "Mentor")
+                        .WithMany("SessionPriceHistory")
+                        .HasForeignKey("MentorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Mentor");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.MentorshipProgress", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationMentor", "Mentor")
+                        .WithMany("MentorshipProgressEntries")
+                        .HasForeignKey("MentorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "Student")
+                        .WithMany("MentorshipProgressEntries")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Mentor");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "User")
+                        .WithMany("Notifications")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.MentorshipProgress", "MentorshipProgress")
+                        .WithMany()
+                        .HasForeignKey("MentorshipProgressId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SkillScape.Domain.Entities.MentorSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MentorshipProgress");
+
+                    b.Navigation("Session");
 
                     b.Navigation("Student");
                 });
@@ -843,6 +1350,44 @@ namespace SkillScape.Infrastructure.Migrations
                     b.Navigation("Module");
                 });
 
+            modelBuilder.Entity("SkillScape.Domain.Entities.SessionComplaint", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "Reporter")
+                        .WithMany()
+                        .HasForeignKey("ReportedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SkillScape.Domain.Entities.MentorSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Reporter");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.SessionFeedback", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationMentor", "Mentor")
+                        .WithMany("Feedbacks")
+                        .HasForeignKey("MentorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SkillScape.Domain.Entities.MentorSession", "Session")
+                        .WithOne("Feedback")
+                        .HasForeignKey("SkillScape.Domain.Entities.SessionFeedback", "SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Mentor");
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("SkillScape.Domain.Entities.Skill", b =>
                 {
                     b.HasOne("SkillScape.Domain.Entities.CareerDomain", "CareerDomain")
@@ -852,6 +1397,17 @@ namespace SkillScape.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("CareerDomain");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.StudentWallet", b =>
+                {
+                    b.HasOne("SkillScape.Domain.Entities.ApplicationUser", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Student");
                 });
 
             modelBuilder.Entity("SkillScape.Domain.Entities.UserBadge", b =>
@@ -932,16 +1488,30 @@ namespace SkillScape.Infrastructure.Migrations
 
             modelBuilder.Entity("SkillScape.Domain.Entities.ApplicationMentor", b =>
                 {
+                    b.Navigation("Feedbacks");
+
                     b.Navigation("MentorRequests");
+
+                    b.Navigation("MentorshipProgressEntries");
+
+                    b.Navigation("SessionPriceHistory");
+
+                    b.Navigation("Sessions");
                 });
 
             modelBuilder.Entity("SkillScape.Domain.Entities.ApplicationUser", b =>
                 {
                     b.Navigation("MentorProfile");
 
+                    b.Navigation("MentorshipProgressEntries");
+
+                    b.Navigation("Notifications");
+
                     b.Navigation("QuizResponses");
 
                     b.Navigation("SentRequests");
+
+                    b.Navigation("StudentSessions");
 
                     b.Navigation("UserBadges");
 
@@ -964,6 +1534,11 @@ namespace SkillScape.Infrastructure.Migrations
                     b.Navigation("Skills");
 
                     b.Navigation("UserProgressions");
+                });
+
+            modelBuilder.Entity("SkillScape.Domain.Entities.MentorSession", b =>
+                {
+                    b.Navigation("Feedback");
                 });
 
             modelBuilder.Entity("SkillScape.Domain.Entities.QuizOption", b =>

@@ -1,6 +1,15 @@
 import { apiClient } from './axios';
 
 // =============================================
+// Helper function to unwrap ApiResponse
+// =============================================
+const unwrapData = (response, endpoint = 'auth') => {
+  const data = response.data?.Data ?? response.data?.data ?? response.data;
+  console.log(`[${endpoint}] Response unwrapped:`, data);
+  return data;
+};
+
+// =============================================
 // Authentication API Service
 // =============================================
 
@@ -10,7 +19,8 @@ export const authApi = {
    */
   login: async (credentials) => {
     const response = await apiClient.post('/auth/login', credentials);
-    return response.data.data; // Extract data from ApiResponse wrapper
+    console.log('[Auth] Login response:', response);
+    return unwrapData(response, 'auth/login');
   },
 
   /**
@@ -18,7 +28,8 @@ export const authApi = {
    */
   register: async (credentials) => {
     const response = await apiClient.post('/auth/register', credentials);
-    return response.data.data; // Extract data from ApiResponse wrapper
+    console.log('[Auth] Register response:', response);
+    return unwrapData(response, 'auth/register');
   },
 
   /**
@@ -34,7 +45,8 @@ export const authApi = {
    */
   getCurrentUser: async () => {
     const response = await apiClient.get('/auth/me');
-    return response.data.data; // Extract data from ApiResponse wrapper
+    console.log('[Auth] Get current user response:', response);
+    return unwrapData(response, 'auth/me');
   },
 
   /**
@@ -42,7 +54,8 @@ export const authApi = {
    */
   refreshToken: async () => {
     const response = await apiClient.post('/auth/refresh');
-    return response.data.data; // Extract data from ApiResponse wrapper
+    console.log('[Auth] Refresh token response:', response);
+    return unwrapData(response, 'auth/refresh');
   },
 
   /**
@@ -50,7 +63,7 @@ export const authApi = {
    */
   forgotPassword: async (email) => {
     const response = await apiClient.post('/auth/forgot-password', { email });
-    return response.data;
+    return unwrapData(response, 'auth/forgot-password');
   },
 
   /**
@@ -58,7 +71,7 @@ export const authApi = {
    */
   resetPassword: async (token, password) => {
     const response = await apiClient.post('/auth/reset-password', { token, password });
-    return response.data;
+    return unwrapData(response, 'auth/reset-password');
   },
 
   /**
@@ -66,7 +79,8 @@ export const authApi = {
    */
   updateProfile: async (data) => {
     const response = await apiClient.patch('/auth/profile', data);
-    return response.data.data; // Extract data from ApiResponse wrapper
+    console.log('[Auth] Update profile response:', response);
+    return unwrapData(response, 'auth/profile');
   },
 
   /**
@@ -74,7 +88,7 @@ export const authApi = {
    */
   changePassword: async (currentPassword, newPassword) => {
     const response = await apiClient.post('/auth/change-password', { currentPassword, newPassword });
-    return response.data;
+    return unwrapData(response, 'auth/change-password');
   },
 
   /**
@@ -86,7 +100,7 @@ export const authApi = {
         'Content-Type': 'multipart/form-data'
       }
     });
-    return response.data.data;
+    return unwrapData(response, 'auth/upload-avatar');
   },
 
   /**
@@ -94,7 +108,7 @@ export const authApi = {
    */
   deleteAccount: async () => {
     const response = await apiClient.delete('/auth/me');
-    return response.data;
+    return unwrapData(response, 'auth/delete');
   },
 };
 

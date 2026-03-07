@@ -10,26 +10,51 @@ import {
   Trophy,
   FileText,
   Users,
+  DollarSign,
   User,
+  CalendarClock,
+  Clock,
+  BarChart3,
+  BellRing,
+  ListChecks,
   ChevronLeft,
   ChevronRight,
   LogOut,
   Settings,
   Sparkles,
   MessageSquare,
+  Shield,
+  UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const navItems = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/quiz', icon: Compass, label: 'Career Quiz' },
-  { path: '/roadmap', icon: Map, label: 'Roadmap' },
-  { path: '/progress', icon: Trophy, label: 'Progress' },
-  { path: '/resume', icon: FileText, label: 'Resume' },
-  { path: '/mentors', icon: Users, label: 'Mentors' },
-  { path: '/messages', icon: MessageSquare, label: 'Messages' },
-  { path: '/profile', icon: User, label: 'Profile' },
+  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', hiddenRoles: ['Admin', 'Mentor'] },
+  { path: '/mentor-dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['Mentor'] },
+  { path: '/mentor-dashboard/requests', icon: ListChecks, label: 'Pending Requests', roles: ['Mentor'] },
+  { path: '/mentor-dashboard/students', icon: Users, label: 'Students', roles: ['Mentor'] },
+  { path: '/mentor-dashboard/payments', icon: DollarSign, label: 'Payments', roles: ['Mentor'] },
+  { path: '/sessions', icon: CalendarClock, label: 'Sessions', roles: ['Mentor'] },
+  { path: '/mentor-dashboard/feedback', icon: MessageSquare, label: 'Feedback', roles: ['Mentor'] },
+  { path: '/mentor-dashboard/schedule', icon: Clock, label: 'Schedule', roles: ['Mentor'] },
+  { path: '/quiz', icon: Compass, label: 'Career Quiz', hiddenRoles: ['Admin', 'Mentor'] },
+  { path: '/roadmap', icon: Map, label: 'Roadmap', hiddenRoles: ['Admin', 'Mentor'] },
+  { path: '/progress', icon: Trophy, label: 'Progress', hiddenRoles: ['Admin', 'Mentor'] },
+  { path: '/resume', icon: FileText, label: 'Resume', hiddenRoles: ['Admin', 'Mentor'] },
+  { path: '/mentors', icon: Users, label: 'Mentors', hiddenRoles: ['Admin', 'Mentor'] },
+  { path: '/my-mentors', icon: UserCheck, label: 'My Mentors', hiddenRoles: ['Admin', 'Mentor'] },
+  { path: '/messages', icon: MessageSquare, label: 'Messages', hiddenRoles: ['Admin'] },
+  { path: '/profile', icon: User, label: 'Profile', hiddenRoles: ['Admin'] },
+  { path: '/admin', icon: Shield, label: 'Dashboard', roles: ['Admin'] },
+  { path: '/admin/users', icon: Users, label: 'Users', roles: ['Admin'] },
+  { path: '/admin/mentors', icon: User, label: 'Mentors', roles: ['Admin'] },
+  { path: '/admin/questions', icon: ListChecks, label: 'Questions', roles: ['Admin'] },
+  { path: '/admin/roadmap', icon: Map, label: 'Roadmap', roles: ['Admin'] },
+  { path: '/admin/progress', icon: Trophy, label: 'Progress', roles: ['Admin'] },
+  { path: '/admin/sessions', icon: CalendarClock, label: 'Sessions', roles: ['Admin'] },
+  { path: '/admin/analytics', icon: BarChart3, label: 'Analytics', roles: ['Admin'] },
+  { path: '/admin/announcement', icon: BellRing, label: 'Announcement', roles: ['Admin'] },
 ];
 
 export const Sidebar = () => {
@@ -74,7 +99,9 @@ export const Sidebar = () => {
 
       {/* Navigation Links */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => {
+        {navItems
+          .filter((item) => (!item.roles || item.roles.includes(user?.role)) && (!item.hiddenRoles || !item.hiddenRoles.includes(user?.role)))
+          .map((item) => {
           const isActive = location.pathname === item.path;
 
           return (

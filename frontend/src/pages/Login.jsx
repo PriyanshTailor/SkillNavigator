@@ -5,14 +5,12 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Loader2, Mail, Lock, ArrowRight } from 'lucide-react';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -85,11 +83,6 @@ const LoginPage = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Checkbox id="remember" checked={rememberMe} onCheckedChange={(checked) => setRememberMe(!!checked)} />
-          <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">Remember me for 30 days</Label>
-        </div>
-
         <Button type="submit" className="w-full h-12 bg-gradient-accent hover:opacity-90 transition-opacity" disabled={isLoading}>
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -107,22 +100,6 @@ const LoginPage = () => {
           Don't have an account?{' '}
           <Link to="/register" className="font-medium text-accent hover:underline">Sign up for free</Link>
         </p>
-      </div>
-
-      <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
-        <p className="text-xs text-muted-foreground text-center mb-2">Demo credentials (any email/password works)</p>
-        <div className="flex gap-2 justify-center">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setEmail('demo@skillscape.com');
-              setPassword('demo123');
-            }}
-          >
-            Use Demo
-          </Button>
-        </div>
       </div>
     </motion.div>
   );

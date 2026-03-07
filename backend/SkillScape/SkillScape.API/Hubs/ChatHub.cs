@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using SkillScape.Domain.Entities;
 using SkillScape.Infrastructure.Data;
 using System.Security.Claims;
@@ -43,7 +44,7 @@ public class ChatHub : Hub
 
     public async Task SendMessage(string receiverId, string content, string? imageUrl = null)
     {
-        var logFile = @"c:\Users\Priyansh\Downloads\skill-navigator-main (1)\skill-navigator-main\backend\SkillScape\SkillScape.API\chat_debug_log.txt";
+        var logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "chat_debug_log.txt");
         
         var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         
@@ -72,6 +73,29 @@ public class ChatHub : Hub
             await _context.SaveChangesAsync();
             System.IO.File.AppendAllText(logFile, " - DB Save Success");
 
+            var sender = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == senderId);
+
+            var senderName = sender?.FullName ?? "Someone";
+            var notificationMessage = !string.IsNullOrWhiteSpace(content)
+                ? content
+                : "Sent an image";
+
+            var dbNotification = new Notification
+            {
+                UserId = receiverId,
+                Type = "Message",
+                Title = $"New message from {senderName}",
+                Message = notificationMessage,
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Notifications.Add(dbNotification);
+            await _context.SaveChangesAsync();
+            System.IO.File.AppendAllText(logFile, " - Notification Save Success");
+
             // Broadcast to the room
             var roomName = GetChatRoomName(senderId, receiverId);
             await Clients.Group(roomName).SendAsync("ReceiveMessage", message);
@@ -96,7 +120,8 @@ public class ChatHub : Hub
             Message = content,
             ImageUrl = imageUrl,
             Type = "chat",
-            SenderId = senderId
+            SenderId = senderId,
+            DbNotificationType = "Message"
         });
     }
 

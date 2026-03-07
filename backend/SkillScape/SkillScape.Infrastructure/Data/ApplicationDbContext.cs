@@ -28,6 +28,15 @@ public class ApplicationDbContext : DbContext
     public DbSet<UserModuleProgress> UserModuleProgressions { get; set; } = null!;
     public DbSet<ApplicationMentor> Mentors { get; set; } = null!;
     public DbSet<MentorRequest> MentorRequests { get; set; } = null!;
+    public DbSet<MentorSession> MentorSessions { get; set; } = null!;
+    public DbSet<SessionFeedback> SessionFeedbacks { get; set; } = null!;
+    public DbSet<MentorshipProgress> MentorshipProgressEntries { get; set; } = null!;
+    public DbSet<Notification> Notifications { get; set; } = null!;
+    public DbSet<SessionComplaint> SessionComplaints { get; set; } = null!;
+    public DbSet<AdminAuditLog> AdminAuditLogs { get; set; } = null!;
+    public DbSet<StudentWallet> StudentWallets { get; set; } = null!;
+    public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
+    public DbSet<MentorSessionPriceHistory> MentorSessionPriceHistory { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,6 +49,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
             entity.Property(e => e.FullName).IsRequired().HasMaxLength(256);
             entity.Property(e => e.Role).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ProfileCompleted).IsRequired();
+            entity.Property(e => e.BlockedReason).HasMaxLength(500);
             entity.HasIndex(e => e.Email).IsUnique();
         });
 
@@ -233,6 +244,15 @@ public class ApplicationDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Expertise).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.ExpertiseArea).HasMaxLength(256);
+            entity.Property(e => e.CurrentCompany).HasMaxLength(256);
+            entity.Property(e => e.SkillsCsv).HasMaxLength(2000);
+            entity.Property(e => e.LinkedInUrl).HasMaxLength(500);
+            entity.Property(e => e.AvailabilitySchedule).HasMaxLength(2000);
+            entity.Property(e => e.HourlyRate).HasPrecision(18, 2);
+            entity.Property(e => e.SessionPrice).HasPrecision(18, 2);
+            entity.Property(e => e.ApprovedByAdminId).HasMaxLength(450);
+            entity.Property(e => e.RejectionReason).HasMaxLength(1000);
             
             entity.HasOne(m => m.User)
                 .WithOne(u => u.MentorProfile)
@@ -256,6 +276,153 @@ public class ApplicationDbContext : DbContext
                 .WithMany(m => m.MentorRequests)
                 .HasForeignKey(mr => mr.MentorId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // MentorSession
+        modelBuilder.Entity<MentorSession>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.MeetingLink).HasMaxLength(500);
+
+            entity.HasOne(ms => ms.Student)
+                .WithMany(u => u.StudentSessions)
+                .HasForeignKey(ms => ms.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(ms => ms.Mentor)
+                .WithMany(m => m.Sessions)
+                .HasForeignKey(ms => ms.MentorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SessionFeedback
+        modelBuilder.Entity<SessionFeedback>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Rating).IsRequired();
+
+            entity.HasOne(sf => sf.Session)
+                .WithOne(s => s.Feedback)
+                .HasForeignKey<SessionFeedback>(sf => sf.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(sf => sf.Mentor)
+                .WithMany(m => m.Feedbacks)
+                .HasForeignKey(sf => sf.MentorId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // MentorshipProgress
+        modelBuilder.Entity<MentorshipProgress>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RoadmapStage).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+
+            entity.HasOne(mp => mp.Student)
+                .WithMany(u => u.MentorshipProgressEntries)
+                .HasForeignKey(mp => mp.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(mp => mp.Mentor)
+                .WithMany(m => m.MentorshipProgressEntries)
+                .HasForeignKey(mp => mp.MentorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.StudentId, e.MentorId }).IsUnique();
+        });
+
+        modelBuilder.Entity<StudentWallet>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Balance).HasPrecision(18, 2);
+
+            entity.HasOne(sw => sw.Student)
+                .WithMany()
+                .HasForeignKey(sw => sw.StudentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.StudentId).IsUnique();
+        });
+
+        modelBuilder.Entity<PaymentTransaction>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+
+            entity.HasOne(pt => pt.Student)
+                .WithMany()
+                .HasForeignKey(pt => pt.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(pt => pt.MentorshipProgress)
+                .WithMany()
+                .HasForeignKey(pt => pt.MentorshipProgressId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(pt => pt.Session)
+                .WithMany()
+                .HasForeignKey(pt => pt.SessionId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<MentorSessionPriceHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SessionPrice).HasPrecision(18, 2);
+
+            entity.HasOne(h => h.Mentor)
+                .WithMany(m => m.SessionPriceHistory)
+                .HasForeignKey(h => h.MentorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.MentorId, e.EffectiveFrom });
+        });
+
+        // Notification
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Message).IsRequired().HasMaxLength(1000);
+
+            entity.HasOne(n => n.User)
+                .WithMany(u => u.Notifications)
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SessionComplaint
+        modelBuilder.Entity<SessionComplaint>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ResolutionNote).HasMaxLength(1000);
+
+            entity.HasOne(sc => sc.Session)
+                .WithMany()
+                .HasForeignKey(sc => sc.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(sc => sc.Reporter)
+                .WithMany()
+                .HasForeignKey(sc => sc.ReportedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // AdminAuditLog
+        modelBuilder.Entity<AdminAuditLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.TargetEntity).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.TargetEntityId).HasMaxLength(450);
+
+            entity.HasOne(a => a.Admin)
+                .WithMany()
+                .HasForeignKey(a => a.AdminId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ChatMessage

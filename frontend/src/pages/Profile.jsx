@@ -47,11 +47,6 @@ const ProfilePage = () => {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
-  // Notification settings
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [weeklyDigest, setWeeklyDigest] = useState(false);
-
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -187,11 +182,6 @@ const ProfilePage = () => {
           <TabsTrigger value="security" className="gap-2">
             <Lock className="h-4 w-4" />
             <span className="hidden sm:inline">Security</span>
-          </TabsTrigger>
-
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="h-4 w-4" />
-            <span className="hidden sm:inline">Notifications</span>
           </TabsTrigger>
 
           <TabsTrigger value="preferences" className="gap-2">
@@ -337,92 +327,6 @@ const ProfilePage = () => {
                   >
                     {isChangingPassword ? 'Updating...' : 'Update Password'}
                   </Button>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h3 className="font-medium text-foreground mb-2">Two-Factor Authentication</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Add an extra layer of security to your account
-                  </p>
-                  <Button variant="outline">
-                    <Shield className="mr-2 h-4 w-4" />
-                    Enable 2FA
-                  </Button>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h3 className="font-medium text-foreground mb-2">Active Sessions</h3>
-                  <div className="p-4 rounded-lg bg-secondary/50">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Current Session</p>
-                        <p className="text-xs text-muted-foreground">San Francisco, CA • Chrome on macOS</p>
-                      </div>
-                      <Badge className="bg-success/10 text-success">Active</Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Notifications Tab */}
-        <TabsContent value="notifications">
-          <Card className="shadow-soft border-border/50">
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-foreground">Email Notifications</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Receive updates about your progress via email
-                    </p>
-                  </div>
-                  <Switch
-                    checked={emailNotifications}
-                    onCheckedChange={(value) => setEmailNotifications(!!value)}
-                  />
-
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-foreground">Push Notifications</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Get notified about new achievements and reminders
-                    </p>
-                  </div>
-                  <Switch
-                    checked={pushNotifications}
-                    onCheckedChange={(value) => setPushNotifications(!!value)}
-                  />
-
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-foreground">Weekly Digest</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Receive a weekly summary of your learning progress
-                    </p>
-                  </div>
-                  <Switch
-                    checked={weeklyDigest}
-                    onCheckedChange={(value) => setWeeklyDigest(!!value)}
-                  />
-
                 </div>
               </div>
             </CardContent>

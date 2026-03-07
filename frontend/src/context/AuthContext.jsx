@@ -89,6 +89,7 @@ export const AuthProvider = ({ children }) => {
         fullName: data.fullName,
         name: data.fullName, // Alias for compatibility
         role: data.role,
+        profileCompleted: data.profileCompleted,
         expiresAt: data.expiresAt,
       };
       
@@ -116,6 +117,7 @@ export const AuthProvider = ({ children }) => {
         fullName: data.fullName,
         name: data.fullName, // Alias for compatibility
         role: data.role,
+        profileCompleted: data.profileCompleted,
         expiresAt: data.expiresAt,
       };
       
